@@ -79,11 +79,11 @@ function Index() {
 
         {demoMode && (
           <div className="mt-5 rounded-lg border border-border bg-card p-4 text-sm">
-            <strong>Demo mode active.</strong> No trained model found yet.{" "}
+            <strong>Demo mode active.</strong>{" "}
             <Link to="/train" className="text-primary underline underline-offset-2">
               Train your own gestures in the browser →
             </Link>{" "}
-            (no Python, no Colab). Or drop an exported model into{" "}
+            (record samples + train in-browser). You can also drop an exported model into{" "}
             <code>public/model/</code>.
           </div>
         )}

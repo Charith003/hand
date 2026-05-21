@@ -107,7 +107,7 @@ export function useHandTracking(options: HandTrackingOptions = {}) {
         ];
         setDemoMode(true);
         setModelSource("demo");
-        setStatus("Demo mode — train your own gestures");
+        setStatus("Demo mode active — training optional");
       } finally {
         if (!cancelled) setIsReady(true);
       }
@@ -194,11 +194,11 @@ export function useHandTracking(options: HandTrackingOptions = {}) {
       } else if (demoMode && handsLandmarks.length > 0) {
         const sum = keypoints.reduce((a: number, b: number) => a + Math.abs(b), 0);
         const idx = Math.floor(sum * 7) % labelsRef.current.length;
-        const conf = 0.88 + (Math.sin(now / 800) + 1) * 0.05;
-        const word = labelsRef.current[idx];
+        const conf = 0.82 + (Math.sin(now / 800) + 1) * 0.08;
+        const word = labelsRef.current[idx] ?? "";
         const next = { word, confidence: Math.min(0.99, conf) };
         setPrediction(next);
-        onPrediction?.(next);
+        if (next.word) onPrediction?.(next);
       }
     },
     [drawSkeleton, demoMode, confidenceThreshold, onPrediction, enableInference],
