@@ -47,6 +47,7 @@ export function useHandTracking(options: HandTrackingOptions = {}) {
   const [status, setStatus] = useState("Initializing...");
   const [handVisible, setHandVisible] = useState(false);
   const [modelSource, setModelSource] = useState<"indexeddb" | "public" | "demo">("demo");
+  const fallbackTickerRef = useRef<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -208,40 +209,59 @@ export function useHandTracking(options: HandTrackingOptions = {}) {
     if (!isReady) return;
     let stopped = false;
     (async () => {
-      const { Hands } = await import("@mediapipe/hands");
-      const { Camera } = await import("@mediapipe/camera_utils");
-      if (stopped) return;
-      const hands = new Hands({
-        locateFile: (f: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`,
-      });
-      hands.setOptions({
-        maxNumHands: 2,
-        modelComplexity: 1,
-        minDetectionConfidence: 0.6,
-        minTrackingConfidence: 0.5,
-      });
-      hands.onResults(onResults);
-      handsRef.current = hands;
-
-      if (videoRef.current) {
-        const camera = new Camera(videoRef.current, {
-          onFrame: async () => {
-            if (videoRef.current) await hands.send({ image: videoRef.current });
-          },
-          width: 640,
-          height: 480,
-        });
-        cameraRef.current = camera;
         try {
-          await camera.start();
+          const { Hands } = await import("@mediapipe/hands");
+          const { Camera } = await import("@mediapipe/camera_utils");
+          if (stopped) return;
+          const hands = new Hands({
+            locateFile: (f: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`,
+          });
+          hands.setOptions({
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.6,
+            minTrackingConfidence: 0.5,
+          });
+          hands.onResults(onResults);
+          handsRef.current = hands;
+
+          if (videoRef.current) {
+            const camera = new Camera(videoRef.current, {
+              onFrame: async () => {
+                if (videoRef.current) await hands.send({ image: videoRef.current });
+              },
+              width: 640,
+              height: 480,
+            });
+            cameraRef.current = camera;
+            try {
+              await camera.start();
+            } catch {
+              setStatus("Camera blocked — using demo predictions");
+            }
+          }
         } catch {
-          setStatus("Camera permission denied");
+          setStatus("Live camera unavailable — running offline demo");
+          if (demoMode) {
+            const words = labelsRef.current.length > 0
+              ? labelsRef.current
+              : ["hello", "yes", "no", "help"];
+            fallbackTickerRef.current = window.setInterval(() => {
+              const idx = Math.floor((Date.now() / 1200) % words.length);
+              const next = { word: words[idx] ?? "hello", confidence: 0.86 };
+              setPrediction(next);
+              onPrediction?.(next);
+            }, 1200);
+          }
         }
-      }
     })();
 
     return () => {
       stopped = true;
+      if (fallbackTickerRef.current) {
+        window.clearInterval(fallbackTickerRef.current);
+        fallbackTickerRef.current = null;
+      }
       try { cameraRef.current?.stop?.(); } catch { /* noop */ }
       try { handsRef.current?.close?.(); } catch { /* noop */ }
     };
