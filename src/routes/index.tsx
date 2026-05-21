@@ -83,7 +83,7 @@ function Index() {
             <Link to="/train" className="text-primary underline underline-offset-2">
               Train your own gestures in the browser →
             </Link>{" "}
-            (record samples + train in-browser). You can also drop an exported model into{" "}
+            (record samples + train in-browser). Demo labels are visual only and are not used to build sentences. You can also drop an exported model into{" "}
             <code>public/model/</code>.
           </div>
         )}
