@@ -79,7 +79,7 @@ function Index() {
 
         {demoMode && (
           <div className="mt-5 rounded-lg border border-border bg-card p-4 text-sm">
-            <strong>Model not trained yet.</strong>{" "}
+            <strong>Demo mode active.</strong>{" "}
             <Link to="/train" className="text-primary underline underline-offset-2">
               Train your own gestures in the browser →
             </Link>{" "}
