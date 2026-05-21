@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useHandTracking } from "@/hooks/useHandTracking";
 import {
   SEQ_LENGTH,
@@ -31,12 +31,14 @@ function TrainPage() {
   const [activeLabel, setActiveLabel] = useState<string>("");
   const [samples, setSamples] = useState<Sample[]>([]);
   const [recording, setRecording] = useState(false);
+  const [recordedFrames, setRecordedFrames] = useState(0);
   const [countdown, setCountdown] = useState(0);
   const [training, setTraining] = useState(false);
   const [trainLog, setTrainLog] = useState<{ epoch: number; loss: number; acc: number } | null>(null);
   const [trainHistory, setTrainHistory] = useState<{ epoch: number; loss: number; acc: number }[]>([]);
   const [modelVersion, setModelVersion] = useState(0);
   const [message, setMessage] = useState<string>("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const bufferRef = useRef<number[][]>([]);
   const recordingRef = useRef(false);
@@ -47,11 +49,13 @@ function TrainPage() {
   const onFrame = useCallback((keypoints: number[]) => {
     if (!recordingRef.current) return;
     bufferRef.current.push(keypoints);
+    setRecordedFrames(bufferRef.current.length);
     if (bufferRef.current.length >= SEQ_LENGTH) {
       const seq = bufferRef.current.slice(0, SEQ_LENGTH);
       bufferRef.current = [];
       recordingRef.current = false;
       setRecording(false);
+      setRecordedFrames(0);
       setSamples((prev) => [...prev, { label: activeLabelRef.current, sequence: seq }]);
     }
   }, []);
@@ -90,7 +94,24 @@ function TrainPage() {
     }
     setCountdown(0);
     bufferRef.current = [];
+    setRecordedFrames(0);
+    recordingRef.current = true;
     setRecording(true);
+
+    window.setTimeout(() => {
+      if (!recordingRef.current) return;
+      const current = bufferRef.current;
+      if (current.length === 0) return;
+      const last = current[current.length - 1];
+      const padded = [...current];
+      while (padded.length < SEQ_LENGTH) padded.push(last);
+      recordingRef.current = false;
+      setRecording(false);
+      setRecordedFrames(0);
+      bufferRef.current = [];
+      setSamples((prev) => [...prev, { label: activeLabelRef.current, sequence: padded.slice(0, SEQ_LENGTH) }]);
+      setMessage("Sample saved (padded to 30 frames due to slow stream).");
+    }, 6000);
   };
 
   const countsByLabel = labels.map((l) => ({
@@ -138,6 +159,58 @@ function TrainPage() {
     await deleteTrainedModel();
     setModelVersion((v) => v + 1);
     setMessage("Cleared.");
+  };
+
+  const handleDatasetUpload = async (evt: ChangeEvent<HTMLInputElement>) => {
+    const file = evt.target.files?.[0];
+    if (!file) return;
+    try {
+      const raw = await file.text();
+      const parsed = JSON.parse(raw) as {
+        labels?: string[];
+        samples?: Array<{ label: string; sequence: number[][] }>;
+      };
+      if (!Array.isArray(parsed.labels) || !Array.isArray(parsed.samples)) {
+        throw new Error("Invalid JSON. Expected keys: labels[], samples[].");
+      }
+      const normalizedLabels = parsed.labels
+        .map((l) => String(l).trim().toLowerCase())
+        .filter(Boolean);
+      const labelSet = new Set(normalizedLabels);
+
+      const normalizedSamples: Sample[] = parsed.samples
+        .filter((s) => s && typeof s.label === "string" && Array.isArray(s.sequence))
+        .map((s) => ({
+          label: s.label.trim().toLowerCase(),
+          sequence: s.sequence
+            .slice(0, SEQ_LENGTH)
+            .map((frame) => {
+              const row = Array.isArray(frame) ? frame.slice(0, FEATURE_LEN) : [];
+              while (row.length < FEATURE_LEN) row.push(0);
+              return row;
+            }),
+        }))
+        .filter((s) => labelSet.has(s.label))
+        .map((s) => {
+          const seq = [...s.sequence];
+          const pad = seq.length > 0 ? seq[seq.length - 1] : new Array(FEATURE_LEN).fill(0);
+          while (seq.length < SEQ_LENGTH) seq.push([...pad]);
+          return { label: s.label, sequence: seq };
+        });
+
+      if (normalizedLabels.length < 2 || normalizedSamples.length === 0) {
+        throw new Error("Need at least 2 labels and 1 valid sample.");
+      }
+
+      setLabels(normalizedLabels);
+      setActiveLabel(normalizedLabels[0] ?? "");
+      setSamples(normalizedSamples);
+      setMessage(`Imported dataset: ${normalizedLabels.length} labels, ${normalizedSamples.length} samples.`);
+    } catch (e: any) {
+      setMessage(`Import failed: ${e?.message ?? e}`);
+    } finally {
+      evt.target.value = "";
+    }
   };
 
   return (
@@ -192,7 +265,7 @@ function TrainPage() {
           {recording && (
             <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-full border border-red-500/40 bg-red-500/90 px-5 py-2 text-sm font-medium text-white">
               <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
-              Recording {bufferRef.current.length}/{SEQ_LENGTH}
+              Recording {recordedFrames}/{SEQ_LENGTH}
             </div>
           )}
           {!activeLabel && !recording && countdown === 0 && (
@@ -266,6 +339,24 @@ function TrainPage() {
             <p className="mt-2 text-xs text-muted-foreground">
               Aim for 8–15 samples per gesture, varying angle and distance.
             </p>
+            {recording && (
+              <p className="mt-2 text-xs text-foreground">
+                Capturing frames: {recordedFrames}/{SEQ_LENGTH}
+              </p>
+            )}
+            <div className="mt-4 border-t border-border pt-3">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Or import dataset JSON</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Format: {"{ labels: string[], samples: { label, sequence[30][126] }[] }"}
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/json"
+                onChange={handleDatasetUpload}
+                className="mt-2 block w-full text-xs text-muted-foreground file:mr-3 file:rounded-md file:border file:border-border file:bg-background file:px-3 file:py-1.5 file:text-xs"
+              />
+            </div>
           </div>
 
           <div className="rounded-2xl border border-border bg-card p-5">
