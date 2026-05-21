@@ -47,6 +47,7 @@ export function useHandTracking(options: HandTrackingOptions = {}) {
   const [status, setStatus] = useState("Initializing...");
   const [handVisible, setHandVisible] = useState(false);
   const [modelSource, setModelSource] = useState<"indexeddb" | "public" | "demo">("demo");
+  const fallbackTickerRef = useRef<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -107,7 +108,7 @@ export function useHandTracking(options: HandTrackingOptions = {}) {
         ];
         setDemoMode(true);
         setModelSource("demo");
-        setStatus("Demo mode — train your own gestures");
+        setStatus("Demo mode active — training optional");
       } finally {
         if (!cancelled) setIsReady(true);
       }
@@ -194,11 +195,11 @@ export function useHandTracking(options: HandTrackingOptions = {}) {
       } else if (demoMode && handsLandmarks.length > 0) {
         const sum = keypoints.reduce((a: number, b: number) => a + Math.abs(b), 0);
         const idx = Math.floor(sum * 7) % labelsRef.current.length;
-        const conf = 0.88 + (Math.sin(now / 800) + 1) * 0.05;
-        const word = labelsRef.current[idx];
+        const conf = 0.82 + (Math.sin(now / 800) + 1) * 0.08;
+        const word = labelsRef.current[idx] ?? "";
         const next = { word, confidence: Math.min(0.99, conf) };
         setPrediction(next);
-        onPrediction?.(next);
+        // Do not emit demo predictions into sentence builder; they are synthetic.
       }
     },
     [drawSkeleton, demoMode, confidenceThreshold, onPrediction, enableInference],
@@ -208,40 +209,59 @@ export function useHandTracking(options: HandTrackingOptions = {}) {
     if (!isReady) return;
     let stopped = false;
     (async () => {
-      const { Hands } = await import("@mediapipe/hands");
-      const { Camera } = await import("@mediapipe/camera_utils");
-      if (stopped) return;
-      const hands = new Hands({
-        locateFile: (f: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`,
-      });
-      hands.setOptions({
-        maxNumHands: 2,
-        modelComplexity: 1,
-        minDetectionConfidence: 0.6,
-        minTrackingConfidence: 0.5,
-      });
-      hands.onResults(onResults);
-      handsRef.current = hands;
-
-      if (videoRef.current) {
-        const camera = new Camera(videoRef.current, {
-          onFrame: async () => {
-            if (videoRef.current) await hands.send({ image: videoRef.current });
-          },
-          width: 640,
-          height: 480,
-        });
-        cameraRef.current = camera;
         try {
-          await camera.start();
+          const { Hands } = await import("@mediapipe/hands");
+          const { Camera } = await import("@mediapipe/camera_utils");
+          if (stopped) return;
+          const hands = new Hands({
+            locateFile: (f: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`,
+          });
+          hands.setOptions({
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.6,
+            minTrackingConfidence: 0.5,
+          });
+          hands.onResults(onResults);
+          handsRef.current = hands;
+
+          if (videoRef.current) {
+            const camera = new Camera(videoRef.current, {
+              onFrame: async () => {
+                if (videoRef.current) await hands.send({ image: videoRef.current });
+              },
+              width: 640,
+              height: 480,
+            });
+            cameraRef.current = camera;
+            try {
+              await camera.start();
+            } catch {
+              setStatus("Camera blocked — using demo predictions");
+            }
+          }
         } catch {
-          setStatus("Camera permission denied");
+          setStatus("Live camera unavailable — running offline demo");
+          if (demoMode) {
+            const words = labelsRef.current.length > 0
+              ? labelsRef.current
+              : ["hello", "yes", "no", "help"];
+            fallbackTickerRef.current = window.setInterval(() => {
+              const idx = Math.floor((Date.now() / 1200) % words.length);
+              const next = { word: words[idx] ?? "hello", confidence: 0.86 };
+              setPrediction(next);
+              // Keep UI alive in offline demo mode, but do not append synthetic words.
+            }, 1200);
+          }
         }
-      }
     })();
 
     return () => {
       stopped = true;
+      if (fallbackTickerRef.current) {
+        window.clearInterval(fallbackTickerRef.current);
+        fallbackTickerRef.current = null;
+      }
       try { cameraRef.current?.stop?.(); } catch { /* noop */ }
       try { handsRef.current?.close?.(); } catch { /* noop */ }
     };
