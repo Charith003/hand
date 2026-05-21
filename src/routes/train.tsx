@@ -31,6 +31,7 @@ function TrainPage() {
   const [activeLabel, setActiveLabel] = useState<string>("");
   const [samples, setSamples] = useState<Sample[]>([]);
   const [recording, setRecording] = useState(false);
+  const [recordedFrames, setRecordedFrames] = useState(0);
   const [countdown, setCountdown] = useState(0);
   const [training, setTraining] = useState(false);
   const [trainLog, setTrainLog] = useState<{ epoch: number; loss: number; acc: number } | null>(null);
@@ -47,11 +48,13 @@ function TrainPage() {
   const onFrame = useCallback((keypoints: number[]) => {
     if (!recordingRef.current) return;
     bufferRef.current.push(keypoints);
+    setRecordedFrames(bufferRef.current.length);
     if (bufferRef.current.length >= SEQ_LENGTH) {
       const seq = bufferRef.current.slice(0, SEQ_LENGTH);
       bufferRef.current = [];
       recordingRef.current = false;
       setRecording(false);
+      setRecordedFrames(0);
       setSamples((prev) => [...prev, { label: activeLabelRef.current, sequence: seq }]);
     }
   }, []);
@@ -90,7 +93,24 @@ function TrainPage() {
     }
     setCountdown(0);
     bufferRef.current = [];
+    setRecordedFrames(0);
+    recordingRef.current = true;
     setRecording(true);
+
+    window.setTimeout(() => {
+      if (!recordingRef.current) return;
+      const current = bufferRef.current;
+      if (current.length === 0) return;
+      const last = current[current.length - 1];
+      const padded = [...current];
+      while (padded.length < SEQ_LENGTH) padded.push(last);
+      recordingRef.current = false;
+      setRecording(false);
+      setRecordedFrames(0);
+      bufferRef.current = [];
+      setSamples((prev) => [...prev, { label: activeLabelRef.current, sequence: padded.slice(0, SEQ_LENGTH) }]);
+      setMessage("Sample saved (padded to 30 frames due to slow stream).");
+    }, 6000);
   };
 
   const countsByLabel = labels.map((l) => ({
@@ -192,7 +212,7 @@ function TrainPage() {
           {recording && (
             <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-full border border-red-500/40 bg-red-500/90 px-5 py-2 text-sm font-medium text-white">
               <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
-              Recording {bufferRef.current.length}/{SEQ_LENGTH}
+              Recording {recordedFrames}/{SEQ_LENGTH}
             </div>
           )}
           {!activeLabel && !recording && countdown === 0 && (
@@ -266,6 +286,11 @@ function TrainPage() {
             <p className="mt-2 text-xs text-muted-foreground">
               Aim for 8–15 samples per gesture, varying angle and distance.
             </p>
+            {recording && (
+              <p className="mt-2 text-xs text-foreground">
+                Capturing frames: {recordedFrames}/{SEQ_LENGTH}
+              </p>
+            )}
           </div>
 
           <div className="rounded-2xl border border-border bg-card p-5">
