@@ -54,6 +54,15 @@ Convert them into this project's sequence format:
 python build_dataset_from_kaggle.py   --dataset-roots "$WLASL_PATH" "$ISL_PATH"   --output dataset   --windows-per-class 100   --max-videos-per-class 100
 ```
 
+Or run one command (auto-download inside the script; no manual download step):
+```bash
+python build_dataset_from_kaggle.py \
+  --kaggle-datasets risangbaskoro/wlasl-processed drblack00/isl-csltr-indian-sign-language-dataset \
+  --output dataset \
+  --windows-per-class 100 \
+  --max-videos-per-class 100
+```
+
 Then train as usual:
 ```bash
 python train_lstm.py

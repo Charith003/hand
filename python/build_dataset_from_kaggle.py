@@ -10,7 +10,6 @@ fixed-length sequences expected by train_lstm.py.
 from __future__ import annotations
 
 import argparse
-import os
 from pathlib import Path
 from typing import Iterable
 
@@ -142,7 +141,13 @@ def build_from_videos(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset-roots", nargs="+", required=True, help="One or more dataset roots")
+    parser.add_argument("--dataset-roots", nargs="+", default=[], help="One or more dataset roots")
+    parser.add_argument(
+        "--kaggle-datasets",
+        nargs="+",
+        default=[],
+        help="Kaggle dataset slugs to auto-download via kagglehub, e.g. risangbaskoro/wlasl-processed",
+    )
     parser.add_argument("--output", default="dataset", help="Output dataset directory")
     parser.add_argument("--seq-length", type=int, default=SEQ_LENGTH)
     parser.add_argument("--max-classes", type=int, default=0, help="0 means all")
@@ -154,6 +159,19 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    dataset_roots = list(args.dataset_roots)
+
+    if args.kaggle_datasets:
+        import kagglehub
+
+        for slug in args.kaggle_datasets:
+            path = kagglehub.dataset_download(slug)
+            dataset_roots.append(path)
+            print(f"[kaggle] {slug} -> {path}")
+
+    if not dataset_roots:
+        raise ValueError("Provide --dataset-roots and/or --kaggle-datasets.")
+
     out_root = Path(args.output)
     out_root.mkdir(parents=True, exist_ok=True)
 
@@ -164,7 +182,7 @@ def main() -> None:
         min_detection_confidence=0.5,
         min_tracking_confidence=0.5,
     ) as hands:
-        for root_str in args.dataset_roots:
+        for root_str in dataset_roots:
             root = Path(root_str)
             if not root.exists():
                 print(f"[skip] root does not exist: {root}")
