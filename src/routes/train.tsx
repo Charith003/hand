@@ -169,20 +169,29 @@ function TrainPage() {
       const parsed = JSON.parse(raw) as {
         labels?: string[];
         samples?: Array<{ label: string; sequence: number[][] }>;
+        items?: Array<{ label?: string; sequence?: number[][]; frames?: number[][] }>;
       };
-      if (!Array.isArray(parsed.labels) || !Array.isArray(parsed.samples)) {
-        throw new Error("Invalid JSON. Expected keys: labels[], samples[].");
+      const rawSamples =
+        (Array.isArray(parsed.samples) && parsed.samples.length > 0 ? parsed.samples : undefined)
+        ?? (Array.isArray(parsed.items) ? parsed.items : undefined);
+      if (!rawSamples || rawSamples.length === 0) {
+        throw new Error("Invalid JSON. Expected samples[] (or items[]) with label + sequence.");
       }
-      const normalizedLabels = parsed.labels
-        .map((l) => String(l).trim().toLowerCase())
-        .filter(Boolean);
-      const labelSet = new Set(normalizedLabels);
 
-      const normalizedSamples: Sample[] = parsed.samples
-        .filter((s) => s && typeof s.label === "string" && Array.isArray(s.sequence))
+      const fileLabels = Array.isArray(parsed.labels)
+        ? parsed.labels.map((l) => String(l).trim().toLowerCase()).filter(Boolean)
+        : [];
+
+      const normalizedSamples: Sample[] = rawSamples
+        .filter(
+          (s) =>
+            s
+            && typeof s.label === "string"
+            && (Array.isArray((s as any).sequence) || Array.isArray((s as any).frames)),
+        )
         .map((s) => ({
-          label: s.label.trim().toLowerCase(),
-          sequence: s.sequence
+          label: String(s.label).trim().toLowerCase(),
+          sequence: (Array.isArray((s as any).sequence) ? (s as any).sequence : (s as any).frames)
             .slice(0, SEQ_LENGTH)
             .map((frame) => {
               const row = Array.isArray(frame) ? frame.slice(0, FEATURE_LEN) : [];
@@ -190,7 +199,6 @@ function TrainPage() {
               return row;
             }),
         }))
-        .filter((s) => labelSet.has(s.label))
         .map((s) => {
           const seq = [...s.sequence];
           const pad = seq.length > 0 ? seq[seq.length - 1] : new Array(FEATURE_LEN).fill(0);
@@ -198,14 +206,27 @@ function TrainPage() {
           return { label: s.label, sequence: seq };
         });
 
+      const labelsFromSamples = Array.from(new Set(normalizedSamples.map((s) => s.label)));
+      const normalizedLabels = fileLabels.length > 0 ? fileLabels : labelsFromSamples;
+      const labelSet = new Set(normalizedLabels);
+      const filteredSamples = normalizedSamples.filter((s) => labelSet.has(s.label));
+
       if (normalizedLabels.length < 2 || normalizedSamples.length === 0) {
-        throw new Error("Need at least 2 labels and 1 valid sample.");
+        throw new Error("Need at least 2 labels and valid sample sequences.");
       }
+
+      const counts = normalizedLabels.map((l) => ({
+        label: l,
+        count: filteredSamples.filter((s) => s.label === l).length,
+      }));
+      const minCount = counts.length ? Math.min(...counts.map((c) => c.count)) : 0;
 
       setLabels(normalizedLabels);
       setActiveLabel(normalizedLabels[0] ?? "");
-      setSamples(normalizedSamples);
-      setMessage(`Imported dataset: ${normalizedLabels.length} labels, ${normalizedSamples.length} samples.`);
+      setSamples(filteredSamples);
+      setMessage(
+        `Imported: ${normalizedLabels.length} labels, ${filteredSamples.length} samples. Min samples/label: ${minCount}.`,
+      );
     } catch (e: any) {
       setMessage(`Import failed: ${e?.message ?? e}`);
     } finally {
@@ -348,6 +369,9 @@ function TrainPage() {
               <p className="text-xs uppercase tracking-wider text-muted-foreground">Or import dataset JSON</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 Format: {"{ labels: string[], samples: { label, sequence[30][126] }[] }"}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Tip: Train button needs at least 2 labels and 5+ samples per label.
               </p>
               <input
                 ref={fileInputRef}
