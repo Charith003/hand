@@ -17,13 +17,19 @@ export function useSentenceBuilder(opts: {
   const lastWordRef = useRef<string>("");
   const lastAddRef = useRef<number>(0);
   const pauseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSpokenRef = useRef<{ text: string; at: number }>({ text: "", at: 0 });
 
   const speak = useCallback((text: string) => {
     if (!text || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const now = Date.now();
+    if (lastSpokenRef.current.text === text && now - lastSpokenRef.current.at < 500) return;
+    lastSpokenRef.current = { text, at: now };
+    window.speechSynthesis.resume();
     window.speechSynthesis.cancel();
     const utt = new SpeechSynthesisUtterance(text);
     utt.rate = 0.95;
     utt.pitch = 1;
+    utt.volume = 1;
     window.speechSynthesis.speak(utt);
   }, []);
 
