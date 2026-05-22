@@ -199,7 +199,7 @@ export function useHandTracking(options: HandTrackingOptions = {}) {
         const word = labelsRef.current[idx] ?? "";
         const next = { word, confidence: Math.min(0.99, conf) };
         setPrediction(next);
-        if (next.word) onPrediction?.(next);
+        // Do not emit demo predictions into sentence builder; they are synthetic.
       }
     },
     [drawSkeleton, demoMode, confidenceThreshold, onPrediction, enableInference],
@@ -250,7 +250,7 @@ export function useHandTracking(options: HandTrackingOptions = {}) {
               const idx = Math.floor((Date.now() / 1200) % words.length);
               const next = { word: words[idx] ?? "hello", confidence: 0.86 };
               setPrediction(next);
-              onPrediction?.(next);
+              // Keep UI alive in offline demo mode, but do not append synthetic words.
             }, 1200);
           }
         }
