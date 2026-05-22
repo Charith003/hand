@@ -34,6 +34,7 @@ function TrainPage() {
   const [recordedFrames, setRecordedFrames] = useState(0);
   const [countdown, setCountdown] = useState(0);
   const [training, setTraining] = useState(false);
+  const [requiredPerLabel, setRequiredPerLabel] = useState(3);
   const [trainLog, setTrainLog] = useState<{ epoch: number; loss: number; acc: number } | null>(null);
   const [trainHistory, setTrainHistory] = useState<{ epoch: number; loss: number; acc: number }[]>([]);
   const [modelVersion, setModelVersion] = useState(0);
@@ -57,6 +58,7 @@ function TrainPage() {
       setRecording(false);
       setRecordedFrames(0);
       setSamples((prev) => [...prev, { label: activeLabelRef.current, sequence: seq }]);
+      setMessage(`Saved sample for "${activeLabelRef.current}".`);
     }
   }, []);
 
@@ -121,7 +123,7 @@ function TrainPage() {
   const minPerLabel = countsByLabel.length
     ? Math.min(...countsByLabel.map((c) => c.count))
     : 0;
-  const canTrain = labels.length >= 2 && minPerLabel >= 5 && !training;
+  const canTrain = labels.length >= 2 && minPerLabel >= requiredPerLabel && !training;
 
   const handleTrain = async () => {
     if (!canTrain) return;
@@ -221,11 +223,11 @@ function TrainPage() {
       }));
       const minCount = counts.length ? Math.min(...counts.map((c) => c.count)) : 0;
 
-      setLabels(normalizedLabels);
+      setLabels((prev) => Array.from(new Set([...prev, ...normalizedLabels])));
       setActiveLabel(normalizedLabels[0] ?? "");
-      setSamples(filteredSamples);
+      setSamples((prev) => [...prev, ...filteredSamples]);
       setMessage(
-        `Imported: ${normalizedLabels.length} labels, ${filteredSamples.length} samples. Min samples/label: ${minCount}.`,
+        `Imported and merged: ${normalizedLabels.length} labels, ${filteredSamples.length} samples. Min samples/label in import: ${minCount}.`,
       );
     } catch (e: any) {
       setMessage(`Import failed: ${e?.message ?? e}`);
@@ -385,6 +387,18 @@ function TrainPage() {
 
           <div className="rounded-2xl border border-border bg-card p-5">
             <p className="text-xs uppercase tracking-wider text-muted-foreground">3 · Train</p>
+            <div className="mt-2 flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Min samples/label</span>
+              <select
+                value={requiredPerLabel}
+                onChange={(e) => setRequiredPerLabel(Number(e.target.value))}
+                className="rounded border border-border bg-background px-2 py-1"
+              >
+                <option value={2}>2 (quick)</option>
+                <option value={3}>3 (recommended)</option>
+                <option value={5}>5 (best)</option>
+              </select>
+            </div>
             <button
               onClick={handleTrain}
               disabled={!canTrain}
@@ -395,7 +409,7 @@ function TrainPage() {
             </button>
             {!canTrain && !training && (
               <p className="mt-2 text-xs text-muted-foreground">
-                Need ≥ 2 labels and ≥ 5 samples per label. Current min: {minPerLabel}.
+                Need ≥ 2 labels and ≥ {requiredPerLabel} samples per label. Current min: {minPerLabel}.
               </p>
             )}
             {trainLog && (
