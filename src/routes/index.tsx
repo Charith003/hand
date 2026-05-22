@@ -43,9 +43,9 @@ function Index() {
             <span className="font-semibold tracking-tight">SignSpeak</span>
           </div>
           <nav className="flex items-center gap-4 text-sm">
-            <Link to="/train" className="text-muted-foreground hover:text-foreground">
-              Train
-            </Link>
+            <a href="#model-setup" className="text-muted-foreground hover:text-foreground">
+              Model Setup
+            </a>
             <Link to="/about" className="text-muted-foreground hover:text-foreground">
               About
             </Link>
@@ -70,13 +70,10 @@ function Index() {
         </p>
 
         {demoMode && (
-          <div className="mt-5 rounded-xl border border-border bg-card/80 p-4 text-sm shadow-sm backdrop-blur">
-            <strong>Demo mode active.</strong>{" "}
-            <Link to="/train" className="text-primary underline underline-offset-2">
-              Train your own gestures in the browser →
-            </Link>{" "}
-            (record samples + train in-browser). Demo labels are visual only and are not used to build sentences. You can also drop an exported model into{" "}
-            <code>public/model/</code>.
+          <div id="model-setup" className="mt-5 rounded-xl border border-border bg-card/80 p-4 text-sm shadow-sm backdrop-blur">
+            <strong>Model setup needed for real recognition.</strong>{" "}
+            This app currently runs in demo visualization mode. For actual sign recognition, place a pre-trained TF.js model in{" "}
+            <code>public/model/</code> and labels in <code>public/labels.json</code>. Then reload.
           </div>
         )}
       </section>
