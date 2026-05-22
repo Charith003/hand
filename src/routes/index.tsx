@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useHandTracking } from "@/hooks/useHandTracking";
 import { useSentenceBuilder } from "@/hooks/useSentenceBuilder";
@@ -28,20 +28,12 @@ function Index() {
     [addPrediction],
   );
 
-  const {
-    videoRef,
-    canvasRef,
-    prediction,
-    isReady,
-    demoMode,
-    status,
-    handVisible,
-    vocabulary,
-  } = useHandTracking({ onPrediction });
+  const { videoRef, canvasRef, prediction, isReady, demoMode, status, handVisible } = useHandTracking({ onPrediction });
+  const hasSentence = useMemo(() => sentenceBuilder.words.length > 0, [sentenceBuilder.words.length]);
 
   return (
-    <main className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border/60">
+    <main className="min-h-screen bg-[radial-gradient(80%_50%_at_10%_0%,rgba(130,90,255,0.16),transparent),radial-gradient(70%_45%_at_100%_0%,rgba(70,210,180,0.14),transparent)] bg-background text-foreground">
+      <header className="border-b border-border/60 bg-background/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-2">
             <div
@@ -51,9 +43,9 @@ function Index() {
             <span className="font-semibold tracking-tight">SignSpeak</span>
           </div>
           <nav className="flex items-center gap-4 text-sm">
-            <Link to="/train" className="text-muted-foreground hover:text-foreground">
-              Train
-            </Link>
+            <a href="#model-setup" className="text-muted-foreground hover:text-foreground">
+              Model Setup
+            </a>
             <Link to="/about" className="text-muted-foreground hover:text-foreground">
               About
             </Link>
@@ -78,18 +70,15 @@ function Index() {
         </p>
 
         {demoMode && (
-          <div className="mt-5 rounded-lg border border-border bg-card p-4 text-sm">
-            <strong>Demo mode active.</strong> No trained model found yet.{" "}
-            <Link to="/train" className="text-primary underline underline-offset-2">
-              Train your own gestures in the browser →
-            </Link>{" "}
-            (no Python, no Colab). Or drop an exported model into{" "}
-            <code>public/model/</code>.
+          <div id="model-setup" className="mt-5 rounded-xl border border-border bg-card/80 p-4 text-sm shadow-sm backdrop-blur">
+            <strong>Model setup needed for real recognition.</strong>{" "}
+            This app currently runs in demo visualization mode. For actual sign recognition, place a pre-trained TF.js model in{" "}
+            <code>public/model/</code> and labels in <code>public/labels.json</code>. Then reload.
           </div>
         )}
       </section>
 
-      <section className="mx-auto grid max-w-6xl gap-6 px-6 pb-10 lg:grid-cols-[1fr_360px]">
+      <section className="mx-auto grid max-w-6xl gap-6 px-6 pb-10 lg:grid-cols-[1fr_380px]">
         {/* Webcam stage */}
         <div
           className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl border border-border bg-black"
@@ -132,7 +121,7 @@ function Index() {
 
         {/* Side panel */}
         <aside className="flex flex-col gap-4">
-          <div className="rounded-2xl border border-border bg-card p-5">
+          <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
             <p className="text-xs uppercase tracking-wider text-muted-foreground">
               Current sentence
             </p>
@@ -146,47 +135,28 @@ function Index() {
             <div className="mt-4 flex flex-wrap gap-2">
               <button
                 onClick={sentenceBuilder.speakNow}
-                className="rounded-lg px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                disabled={!hasSentence}
+                className="cursor-pointer rounded-lg px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                 style={{ background: "var(--gradient-primary)" }}
               >
                 Speak
               </button>
               <button
                 onClick={() => setTtsEnabled((v) => !v)}
-                className="rounded-lg border border-border px-4 py-2 text-sm hover:bg-accent"
+                className="cursor-pointer rounded-lg border border-border px-4 py-2 text-sm hover:bg-accent active:scale-[0.98]"
               >
                 Auto-TTS: {ttsEnabled ? "ON" : "OFF"}
               </button>
               <button
                 onClick={sentenceBuilder.clear}
-                className="rounded-lg border border-border px-4 py-2 text-sm hover:bg-accent"
+                className="cursor-pointer rounded-lg border border-border px-4 py-2 text-sm hover:bg-accent active:scale-[0.98]"
               >
                 Clear
               </button>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-border bg-card p-5">
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">
-              Recognized vocabulary ({vocabulary.length})
-            </p>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {vocabulary.map((w) => (
-                <span
-                  key={w}
-                  className={`rounded-full border px-2.5 py-1 text-xs ${
-                    prediction.word === w
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border text-muted-foreground"
-                  }`}
-                >
-                  {w}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-border bg-card p-5">
+          <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
             <p className="text-xs uppercase tracking-wider text-muted-foreground">
               Session history
             </p>
